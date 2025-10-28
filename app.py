@@ -2,63 +2,44 @@ import streamlit as st
 import tensorflow as tf
 import numpy as np
 from PIL import Image
-import base64
 
-# ------------------------------
-# Function to set background
-# ------------------------------
-def set_background(image_file):
-    with open(image_file, "rb") as f:
-        data = f.read()
-    b64 = base64.b64encode(data).decode()
-    css = f"""
-    <style>
-    .stApp {{
-        background-image: url("data:image/png;base64,{b64}");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-    }}
-    </style>
-    """
-    st.markdown(css, unsafe_allow_html=True)
-# ------------------------------
-# Load your trained model
-# ------------------------------
-@st.cache_resource
-def load_model():
-    model = tf.keras.models.load_model("malaria_model.h5")
-    return model
-
-model = load_model()
-
-# ------------------------------
-# Streamlit App Interface
-# ------------------------------
 st.set_page_config(page_title="Malaria Detection", page_icon="🦠")
 
 st.title("🦠 Malaria Detection Using CNN")
 st.write("Upload a blood smear image to check if it's **Parasitized** or **Uninfected**.")
+
+# Load model
+try:
+    model = tf.keras.models.load_model("malaria_model.h5")
+except Exception as e:
+    st.error(f"Error loading model: {e}")
+    st.stop()
 
 # Upload image
 uploaded_file = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
+
+    # 🟢 Convert to RGB (important fix)
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+
     st.image(image, caption="Uploaded Image", use_container_width=True)
 
-    # Preprocess image (update size if your model uses a different input shape)
-    img = image.resize((64, 64))  # adjust to your model's input size
+    # 🟢 Resize to match your model’s input shape
+    img = image.resize((64, 64))  # or (128,128) if that’s your training size
     img_array = np.array(img) / 255.0
     img_array = np.expand_dims(img_array, axis=0)
 
-    # Prediction
-    prediction = model.predict(img_array)
-    result = "Parasitized" if prediction[0][0] > 0.5 else "Uninfected"
-
-    st.markdown(f"### 🧬 Prediction: **{result}**")
-    st.progress(float(prediction[0][0]))
+    try:
+        prediction = model.predict(img_array)
+        class_names = ['Parasitized', 'Uninfected']
+        pred_class = class_names[np.argmax(prediction)]
+        st.markdown(f"### 🧬 Prediction: **{pred_class}**")
+        st.progress(float(np.max(prediction)))
+    except Exception as e:
+        st.error(f"Error during prediction: {e}")
 
 st.markdown("---")
 st.info("Developed with ❤️ using Streamlit and TensorFlow")
-
